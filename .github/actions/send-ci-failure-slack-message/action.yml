@@ -33,12 +33,12 @@ runs:
             (.conclusion == "failure") or 
             (.status == "in_progress" and ([.steps[]? | select(.conclusion == "failure")] | length > 0))
           ) | 
-          "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
+          "- <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
         ')
 
         # Fallback if nothing found
         if [ -z "$failed_info" ]; then
-          failed_info="• Check the workflow run link above for failure details"
+          failed_info="- Check the workflow run link above for failure details"
         fi
 
         echo "jobs<<EOF" >> $GITHUB_OUTPUT
