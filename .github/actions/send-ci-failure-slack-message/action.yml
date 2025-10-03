@@ -6,6 +6,9 @@ inputs:
   slack_url:
     description: "Slack webhook URL"
     required: true
+  github_token:
+    description: GitHub token for API access
+    required: true
 
 runs:
   using: "composite"
@@ -18,6 +21,8 @@ runs:
     - name: Get failed jobs
       id: failed_jobs
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
       run: |
         jobs=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
           --jq '.jobs[] | select(.conclusion=="failure") | "- <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/\(.id)|\(.name)>"' \
@@ -25,11 +30,9 @@ runs:
         echo "jobs<<EOF" >> $GITHUB_OUTPUT
         echo "$jobs" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Slack Notification on Failure
-      uses: .github/actions/send-slack-message
+      uses: kosli-dev/reusable-actions/.github/actions/send-slack-message@main
       with:
         slack_url: ${{ inputs.slack_url }}
         plain_text_preview: ${{ github.workflow }} faild in ${GITHUB_REPOSITORY}
