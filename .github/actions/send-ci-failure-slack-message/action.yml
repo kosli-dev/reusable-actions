@@ -37,7 +37,7 @@ runs:
         slack_url: ${{ inputs.slack_url }}
         plain_text_preview: ${{ github.workflow }} faild in ${GITHUB_REPOSITORY}
         message: |
-          <https://github.com/${GITHUB_REPOSITORY}|${GITHUB_REPOSITORY}> failed in ${{ github.workflow }} <https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${{ steps.short_sha.outputs.sha }}>
+          <https://github.com/${GITHUB_REPOSITORY}|${GITHUB_REPOSITORY}> failed in *${{ github.workflow }}* <https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${{ steps.short_sha.outputs.sha }}>
           <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|Failed workflow action>
           Failed jobs:
           ${{ steps.failed_jobs.outputs.jobs }}
