@@ -24,9 +24,18 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
-        jobs=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
-          --jq '.jobs[] | select(.conclusion=="failure") | "- <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/\(.id)|\(.name)>"' \
-          | paste -sd "\n" -)
+        # Retry logic to wait for API to update
+        for i in {1..5}; do
+          jobs=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs \
+            --jq '.jobs[] | select(.conclusion=="failure") | "- <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/\(.id)|\(.name)>"' \
+            | paste -sd "\n" -)
+          if [ -n "$jobs" ]; then
+            break
+          fi
+          if [ $i -lt 5 ]; then
+            sleep 2
+          fi
+        done
         echo "jobs<<EOF" >> $GITHUB_OUTPUT
         echo "$jobs" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
