@@ -33,12 +33,7 @@ runs:
             (.conclusion == "failure") or 
             (.status == "in_progress" and ([.steps[]? | select(.conclusion == "failure")] | length > 0))
           ) | 
-          if .conclusion == "failure" then
-            "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
-          else
-            "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)> - Failed: " + 
-            ([.steps[]? | select(.conclusion == "failure") | .name] | join(", "))
-          end
+          "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
         ')
 
         # Fallback if nothing found
