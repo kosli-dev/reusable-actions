@@ -25,14 +25,7 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         job_data=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs)
-        
-        # Debug: Show what we got
-        echo "=== DEBUG: Full job data ==="
-        echo "$job_data" | jq '.'
-        
-        echo "=== DEBUG: Jobs with their status and conclusion ==="
-        echo "$job_data" | jq '.jobs[] | {name, status, conclusion, steps: [.steps[] | {name, conclusion}]}'
-        
+
         # Find both: completed failed jobs AND in-progress jobs with failed steps
         failed_info=$(echo "$job_data" | jq -r '
           .jobs[] | 
@@ -41,23 +34,18 @@ runs:
             (.status == "in_progress" and ([.steps[]? | select(.conclusion == "failure")] | length > 0))
           ) | 
           if .conclusion == "failure" then
-            "- <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
+            "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)>"
           else
-            ([.steps[]? | select(.conclusion == "failure") | 
-              "  - Step: \(.name)"
-            ] | join("\n")) as $steps |
-            "- <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)> (in progress)\n\($steps)"
+            "• <https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'/job/\(.id)|\(.name)> - Failed: " + 
+            ([.steps[]? | select(.conclusion == "failure") | .name] | join(", "))
           end
         ')
-        
-        echo "=== DEBUG: Failed info output ==="
-        echo "$failed_info"
-        
+
         # Fallback if nothing found
         if [ -z "$failed_info" ]; then
-          failed_info="- Check the workflow run link above for failure details"
+          failed_info="• Check the workflow run link above for failure details"
         fi
-        
+
         echo "jobs<<EOF" >> $GITHUB_OUTPUT
         echo "$failed_info" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
