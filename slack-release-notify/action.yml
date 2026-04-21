@@ -136,6 +136,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        REPO_URL: ${{ steps.meta.outputs.repo_url }}
       run: |
         if notes=$(gh release view "${{ inputs.version }}" --json body --jq '.body' 2>/dev/null) && [ -n "$notes" ]; then
           available=true
@@ -143,6 +144,28 @@ runs:
           available=false
           notes="_Release notes unavailable_"
           echo "::warning title=slack-release-notify::Could not fetch release notes for '${{ inputs.version }}'. Release may not exist yet, or 'contents: read' permission is missing."
+        fi
+
+        if [ "$available" = "true" ]; then
+          # ── Convert GitHub markdown → Slack mrkdwn ──
+
+          # Headers: #, ##, ### → bold
+          notes=$(echo "$notes" | sed -E 's/^#{1,6}[[:space:]]+(.*)$/*\1*/')
+
+          # Bold: **text** → *text*
+          notes=$(echo "$notes" | sed -E 's/\*\*([^*]+)\*\*/*\1*/g')
+
+          # Links: [text](url) → <url|text>  (using ~ as delimiter since URLs contain /)
+          notes=$(echo "$notes" | sed -E 's~\[([^]]+)\]\(([^)]+)\)~<\2|\1>~g')
+
+          # Bullet lists: * item or - item → • item
+          notes=$(echo "$notes" | sed -E 's/^[[:space:]]*[-*][[:space:]]+/• /')
+
+          # PR/issue refs: #123 → <repo-url/pull/123|#123>
+          notes=$(echo "$notes" | sed -E "s~(^|[^a-zA-Z0-9_/])#([0-9]+)~\1<${REPO_URL}/pull/\2|#\2>~g")
+
+          # @mentions: neutralize by wrapping in backticks
+          notes=$(echo "$notes" | sed -E 's/(^|[[:space:]])@([a-zA-Z0-9_-]+)/\1`@\2`/g')
         fi
 
         if [ ${#notes} -gt 2500 ]; then
