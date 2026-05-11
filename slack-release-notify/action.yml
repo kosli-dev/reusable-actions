@@ -200,7 +200,7 @@ runs:
 
         {
           echo "tag_field<<TAG_EOF"
-          echo -e "$tag_field"
+          printf '%s\n' "$tag_field"     # ← was: echo -e "$tag_field"
           echo "TAG_EOF"
           echo "footer<<FOOTER_EOF"
           echo "$footer"
@@ -233,11 +233,11 @@ runs:
                   text: "*Duration*\n${{ steps.duration.outputs.pretty }}"
             - type: divider
             - type: section
-                text:
-                  type: mrkdwn
-                  text: |-
-                    *What's changed*
-                    ${{ steps.notes.outputs.body }}
+              text:
+                type: mrkdwn
+                text: |-
+                  *What's changed*
+                  ${{ steps.notes.outputs.body }}
             - type: context
               elements:
                 - type: mrkdwn
