@@ -148,24 +148,25 @@ runs:
 
         if [ "$available" = "true" ]; then
           # ── Convert GitHub markdown → Slack mrkdwn ──
+          # Use printf to preserve newlines through the pipe chain
 
           # Headers: #, ##, ### → bold
-          notes=$(echo "$notes" | sed -E 's/^#{1,6}[[:space:]]+(.*)$/*\1*/')
+          notes=$(printf '%s' "$notes" | sed -E 's/^#{1,6}[[:space:]]+(.*)$/*\1*/')
 
           # Bold: **text** → *text*
-          notes=$(echo "$notes" | sed -E 's/\*\*([^*]+)\*\*/*\1*/g')
+          notes=$(printf '%s' "$notes" | sed -E 's/\*\*([^*]+)\*\*/*\1*/g')
 
-          # Links: [text](url) → <url|text>  (using ~ as delimiter since URLs contain /)
-          notes=$(echo "$notes" | sed -E 's~\[([^]]+)\]\(([^)]+)\)~<\2|\1>~g')
+          # Links: [text](url) → <url|text>
+          notes=$(printf '%s' "$notes" | sed -E 's~\[([^]]+)\]\(([^)]+)\)~<\2|\1>~g')
 
           # Bullet lists: * item or - item → • item
-          notes=$(echo "$notes" | sed -E 's/^[[:space:]]*[-*][[:space:]]+/• /')
+          notes=$(printf '%s' "$notes" | sed -E 's/^[[:space:]]*[-*][[:space:]]+/• /')
 
           # PR/issue refs: #123 → <repo-url/pull/123|#123>
-          notes=$(echo "$notes" | sed -E "s~(^|[^a-zA-Z0-9_/])#([0-9]+)~\1<${REPO_URL}/pull/\2|#\2>~g")
+          notes=$(printf '%s' "$notes" | sed -E "s~(^|[^a-zA-Z0-9_/])#([0-9]+)~\1<${REPO_URL}/pull/\2|#\2>~g")
 
           # @mentions: neutralize by wrapping in backticks
-          notes=$(echo "$notes" | sed -E 's/(^|[[:space:]])@([a-zA-Z0-9_-]+)/\1`@\2`/g')
+          notes=$(printf '%s' "$notes" | sed -E 's/(^|[[:space:]])@([a-zA-Z0-9_-]+)/\1`@\2`/g')
         fi
 
         if [ ${#notes} -gt 2500 ]; then
@@ -175,7 +176,7 @@ runs:
         echo "available=$available" >> "$GITHUB_OUTPUT"
         {
           echo "body<<NOTES_EOF"
-          echo "$notes"
+          printf '%s\n' "$notes"
           echo "NOTES_EOF"
         } >> "$GITHUB_OUTPUT"
 
@@ -232,9 +233,11 @@ runs:
                   text: "*Duration*\n${{ steps.duration.outputs.pretty }}"
             - type: divider
             - type: section
-              text:
-                type: mrkdwn
-                text: "*What's changed*\n${{ steps.notes.outputs.body }}"
+                text:
+                  type: mrkdwn
+                  text: |-
+                    *What's changed*
+                    ${{ steps.notes.outputs.body }}
             - type: context
               elements:
                 - type: mrkdwn
