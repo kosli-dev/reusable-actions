@@ -3,7 +3,7 @@ description: 'Post release start, success, or failure notifications to Slack'
 
 # Required caller permissions:
 #   actions: read   — for workflow run duration (gh api actions/runs/{id})
-#   contents: read  — for release notes (gh release view)
+#   contents: read  — for checking if the release exists (gh release view)
 # Required bot scopes:
 #   chat:write
 
@@ -26,7 +26,7 @@ inputs:
     required: false
     default: ${{ github.ref_name }}
   github-token:
-    description: 'Token for reading release notes and run metadata'
+    description: 'Token for reading workflow run metadata (defaults to github.token)'
     required: false
     default: ${{ github.token }}
 runs:
@@ -130,77 +130,41 @@ runs:
           echo "pretty=$((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Read release notes
-      id: notes
+    - name: Check release exists
+      id: release_check
       if: inputs.stage == 'finish' && inputs.status == 'success'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-        REPO_URL: ${{ steps.meta.outputs.repo_url }}
       run: |
-        if notes=$(gh release view "${{ inputs.version }}" --json body --jq '.body' 2>/dev/null) && [ -n "$notes" ]; then
-          available=true
+        if gh release view "${{ inputs.version }}" --json url --jq '.url' >/dev/null 2>&1; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
         else
-          available=false
-          notes="_Release notes unavailable_"
-          echo "::warning title=slack-release-notify::Could not fetch release notes for '${{ inputs.version }}'. Release may not exist yet, or 'contents: read' permission is missing."
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=slack-release-notify::Release '${{ inputs.version }}' not found — tag link and 'View release notes' link will be omitted."
         fi
-
-        if [ "$available" = "true" ]; then
-          # ── Convert GitHub markdown → Slack mrkdwn ──
-          # Use printf to preserve newlines through the pipe chain
-
-          # Headers: #, ##, ### → bold
-          notes=$(printf '%s' "$notes" | sed -E 's/^#{1,6}[[:space:]]+(.*)$/*\1*/')
-
-          # Bold: **text** → *text*
-          notes=$(printf '%s' "$notes" | sed -E 's/\*\*([^*]+)\*\*/*\1*/g')
-
-          # Links: [text](url) → <url|text>
-          notes=$(printf '%s' "$notes" | sed -E 's~\[([^]]+)\]\(([^)]+)\)~<\2|\1>~g')
-
-          # Bullet lists: * item or - item → • item
-          notes=$(printf '%s' "$notes" | sed -E 's/^[[:space:]]*[-*][[:space:]]+/• /')
-
-          # PR/issue refs: #123 → <repo-url/pull/123|#123>
-          notes=$(printf '%s' "$notes" | sed -E "s~(^|[^a-zA-Z0-9_/])#([0-9]+)~\1<${REPO_URL}/pull/\2|#\2>~g")
-
-          # @mentions: neutralize by wrapping in backticks
-          notes=$(printf '%s' "$notes" | sed -E 's/(^|[[:space:]])@([a-zA-Z0-9_-]+)/\1`@\2`/g')
-        fi
-
-        if [ ${#notes} -gt 2500 ]; then
-          notes="${notes:0:2500}"$'\n\n_…truncated, see full notes on GitHub_'
-        fi
-
-        echo "available=$available" >> "$GITHUB_OUTPUT"
-        {
-          echo "body<<NOTES_EOF"
-          printf '%s\n' "$notes"
-          echo "NOTES_EOF"
-        } >> "$GITHUB_OUTPUT"
 
     - name: Build success message pieces
       id: success_pieces
       if: inputs.stage == 'finish' && inputs.status == 'success'
       shell: bash
       run: |
-        # Tag field: link it only if a release actually exists
-        if [ "${{ steps.notes.outputs.available }}" = "true" ]; then
+        # Tag field: link to release page only if it exists
+        if [ "${{ steps.release_check.outputs.exists }}" = "true" ]; then
           tag_field="*Tag*\n<${{ steps.meta.outputs.compare_url }}|${{ inputs.version }}>"
         else
           tag_field="*Tag*\n\`${{ inputs.version }}\`"
         fi
 
-        # Footer: append release-notes link only if notes are available
-        footer="By <https://github.com/${{ github.actor }}|@${{ github.actor }}> • <${{ steps.meta.outputs.run_url }}|View run> 🔍"
-        if [ "${{ steps.notes.outputs.available }}" = "true" ]; then
-          footer="$footer • <${{ steps.meta.outputs.compare_url }}|Full release notes> 📝"
+        # Footer: append release link only if release exists
+        footer="By <https://github.com/${{ github.actor }}|@${{ github.actor }}> • <${{ steps.meta.outputs.run_url }}|View run logs> 🔍"
+        if [ "${{ steps.release_check.outputs.exists }}" = "true" ]; then
+          footer="$footer • <${{ steps.meta.outputs.compare_url }}|View release notes> 📝"
         fi
 
         {
           echo "tag_field<<TAG_EOF"
-          printf '%s\n' "$tag_field"     # ← was: echo -e "$tag_field"
+          printf '%s\n' "$tag_field"
           echo "TAG_EOF"
           echo "footer<<FOOTER_EOF"
           echo "$footer"
@@ -231,13 +195,6 @@ runs:
                   text: "*Commit*\n<${{ steps.meta.outputs.repo_url }}/commit/${{ github.sha }}|`${{ steps.meta.outputs.sha_short }}`> ${{ steps.meta.outputs.commit_subject }}"
                 - type: mrkdwn
                   text: "*Duration*\n${{ steps.duration.outputs.pretty }}"
-            - type: divider
-            - type: section
-              text:
-                type: mrkdwn
-                text: |-
-                  *What's changed*
-                  ${{ steps.notes.outputs.body }}
             - type: context
               elements:
                 - type: mrkdwn
@@ -270,4 +227,4 @@ runs:
             - type: context
               elements:
                 - type: mrkdwn
-                  text: "By <https://github.com/${{ github.actor }}|@${{ github.actor }}> • <${{ steps.meta.outputs.run_url }}|View logs> 🔍"
+                  text: "By <https://github.com/${{ github.actor }}|@${{ github.actor }}> • <${{ steps.meta.outputs.run_url }}|View run logs> 🔍"
