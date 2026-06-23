@@ -56,6 +56,7 @@ runs:
     - name: Checkout (shallow, for git metadata)
       uses: actions/checkout@v7
       with:
+        ref: ${{ github.sha }}   # immutable — release flows move the tag after trigger
         fetch-depth: 1
         fetch-tags: true
 
