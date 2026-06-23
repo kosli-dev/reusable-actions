@@ -54,9 +54,10 @@ runs:
         fi
 
     - name: Checkout (shallow, for git metadata)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         fetch-depth: 1
+        fetch-tags: true
 
     - name: Gather metadata
       id: meta
