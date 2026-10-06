@@ -2,15 +2,28 @@ name: Send Slack Message
 description: Send a message to Slack via an incoming-webhook URL
 
 inputs:
-  plain_text_preview:
-    description: Plain text preview (shown in notifications, e.g. on mobile)
+  slack_url:
+    description: Slack incoming-webhook URL to send the message to
     required: true
   message:
     description: Slack message to send (mrkdwn)
     required: true
-  slack_url:
-    description: Slack incoming-webhook URL to send the message to
-    required: true
+  plain_text_preview:
+    description: Plain text preview (shown in notifications, e.g. on mobile); defaults to title, then message
+    required: false
+    default: ""
+  title:
+    description: Header shown above the message, cut to 150 characters
+    required: false
+    default: ""
+  color:
+    description: Colour bar beside the message; success, failure or cancelled (the values of job.status), or a hex colour
+    required: false
+    default: ""
+  footer:
+    description: Small mrkdwn line under the message, e.g. a link to the run
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -21,23 +34,23 @@ runs:
         SLACK_URL: ${{ inputs.slack_url }}
         SLACK_PREVIEW: ${{ inputs.plain_text_preview }}
         SLACK_MESSAGE: ${{ inputs.message }}
+        SLACK_TITLE: ${{ inputs.title }}
+        SLACK_COLOR: ${{ inputs.color }}
+        SLACK_FOOTER: ${{ inputs.footer }}
+        PAYLOAD_JQ: ${{ github.action_path }}/payload.jq
       run: |
         # Build the payload with jq so arbitrary message content (quotes,
         # newlines, backticks) is safely escaped into valid JSON.
         PAYLOAD=$(jq -n \
           --arg preview "${SLACK_PREVIEW}" \
           --arg message "${SLACK_MESSAGE}" \
-          '{
-             text: $preview,
-             blocks: [
-               {
-                 type: "section",
-                 text: { type: "mrkdwn", text: $message }
-               }
-             ]
-           }')
+          --arg title "${SLACK_TITLE}" \
+          --arg color "${SLACK_COLOR}" \
+          --arg footer "${SLACK_FOOTER}" \
+          -f "${PAYLOAD_JQ}")
         curl -X POST \
           -H 'Content-type: application/json' \
           --data "${PAYLOAD}" \
-          --fail --silent --show-error \
+          --fail-with-body --silent --show-error \
+          --retry 3 \
           "${SLACK_URL}"

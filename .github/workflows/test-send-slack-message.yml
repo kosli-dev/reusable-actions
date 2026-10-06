@@ -1,0 +1,85 @@
+name: Test send-slack-message
+
+on:
+  pull_request:
+    paths:
+      - .github/actions/send-slack-message/**
+      - .github/workflows/test-send-slack-message.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/send-slack-message/**
+      - .github/workflows/test-send-slack-message.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start a listener that saves each request body under its path
+        run: |
+          mkdir -p "$RUNNER_TEMP/requests"
+          cat > "$RUNNER_TEMP/listener.py" <<'EOF'
+          import http.server, os, sys
+          out = sys.argv[1]
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  body = self.rfile.read(int(self.headers["Content-Length"]))
+                  with open(os.path.join(out, self.path.strip("/") + ".json"), "wb") as f:
+                      f.write(body)
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b"ok")
+          http.server.HTTPServer(("127.0.0.1", 8765), Handler).serve_forever()
+          EOF
+          nohup python3 "$RUNNER_TEMP/listener.py" "$RUNNER_TEMP/requests" > /dev/null 2>&1 &
+          sleep 1
+
+      - name: Send with the original three inputs
+        uses: ./.github/actions/send-slack-message
+        with:
+          slack_url: http://127.0.0.1:8765/original
+          plain_text_preview: preview
+          message: |
+            say "hello" `there` $HOME
+
+      - name: Send with every input
+        uses: ./.github/actions/send-slack-message
+        with:
+          slack_url: http://127.0.0.1:8765/all
+          message: body
+          title: Deployment
+          color: failure
+          footer: <https://example.com|run>
+
+      - name: Make a message longer than 3000 characters
+        id: long
+        run: |
+          {
+            echo 'text<<__EOF__'
+            for _ in $(seq 70); do printf 'x%.0s' $(seq 100); echo; done
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send a message longer than one section
+        uses: ./.github/actions/send-slack-message
+        with:
+          slack_url: http://127.0.0.1:8765/long
+          message: ${{ steps.long.outputs.text }}
+
+      - name: Check the payloads
+        env:
+          REQUESTS: ${{ runner.temp }}/requests
+        run: |
+          set -euo pipefail
+          jq -e '. == {text: "preview", blocks: [{type: "section", text: {type: "mrkdwn", text: "say \"hello\" `there` $HOME\n"}}]}' "$REQUESTS/original.json"
+          jq -e '.text == "Deployment"
+                 and (.blocks | not)
+                 and .attachments[0].color == "#a30200"
+                 and (.attachments[0].blocks | map(.type)) == ["header", "section", "context"]
+                 and .attachments[0].blocks[2].elements[0].text == "<https://example.com|run>"' "$REQUESTS/all.json"
+          jq -e '(.blocks | length) == 3 and all(.blocks[]; .text.text | length <= 3000)' "$REQUESTS/long.json"
